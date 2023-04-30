@@ -1,0 +1,103 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Cria uma VPC"
+
+Parameters:
+  VPCName:
+    Description: Nome da VPC a ser criada
+    Type: String
+    Default: "Minha-VPC-CloudFormation"
+
+Mappings:
+  SubnetConfig:
+    VPC:
+      CIDR: "10.0.0.0/16"
+    Public0:
+      CIDR: "10.0.1.0/24"
+    Private0:
+      CIDR: "10.0.2.0/24"
+
+  AZRegions:
+    us-east-1:
+      AZs: ["a", "b"]
+    sa-east-1:
+      AZs: ["a", "b"]
+
+Resources:
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !FindInMap [SubnetConfig, VPC, CIDR]
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref VPCName
+
+  PublicSubnet0:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [SubnetConfig, Public0, CIDR]
+      AvailabilityZone:
+        Fn::Sub:
+        - "${AWS::Region}${AZ}"
+        - AZ: !Select [0, !FindInMap [AZRegions, !Ref 'AWS::Region', AZs]]
+      Tags:
+        - Key: Name
+          Value: !Sub "${VPCName}-public0"
+
+  PrivateSubnet0:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [SubnetConfig, Private0, CIDR]
+      AvailabilityZone:
+        Fn::Sub:
+        - "${AWS::Region}${AZ}"
+        - AZ: !Select [0, !FindInMap [AZRegions, !Ref 'AWS::Region', AZs]]
+      Tags:
+        - Key: Name
+          Value: !Sub "${VPCName}-private0"
+
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${VPCName}-internet-gateway"
+
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${VPCName}-public-route-table"
+
+  PrivateRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${VPCName}-private-route-table"
+
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet0
+      RouteTableId: !Ref PublicRouteTable
